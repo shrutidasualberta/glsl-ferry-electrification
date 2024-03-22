@@ -21,10 +21,10 @@ import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import DownloadIcon from "@mui/icons-material/Download";
 
-// console.log(adjustedData);
 const currentDate = new Date();
 const formattedDate = currentDate.toISOString().split("T")[0];
 
+let energyCostForTrip = 0;
 // Layout configuration
 const layout = {
   title: {
@@ -136,6 +136,7 @@ function FerryFormMUI() {
     setBatteryCapacity(totalBatteryCapacity);
     setBufferCapacity(totalBatteryCapacity * bufferPercent);
     setPerTripEnergy(routeTransitEnergyRequirement);
+    energyCostForTrip = routeTransitEnergyRequirement;
     return {
       totalBatteryCapacity,
       bufferCapacity: totalBatteryCapacity * bufferPercent,
@@ -163,7 +164,6 @@ function FerryFormMUI() {
     const start = dayjs(`2023-01-01T${startTime}:00.000`); // Treat the time as local
     const minutesToAdd = Math.round(hours * 60); // Convert hours to minutes, rounding to nearest whole number for precision
     const newTime = start.add(minutesToAdd, "minute"); // Use "minute" to add the time
-    // console.log(startTime, minutesToAdd, newTime.format("HH:mm"));
     return newTime.format("HH:mm");
   };
 
@@ -197,23 +197,14 @@ function FerryFormMUI() {
     const chargingPower = parseFloat(fastChargingPower);
     const maxFastChargingPercent = parseFloat(maxFastCharging) / 100;
     const minFastChargeTimeMinutes = parseFloat(minFastChargeTime);
-    //sort by time DESC
     scheduleData.sort((a: any, b: any) => a.x.localeCompare(b.x));
 
-    // let currentPort = getOtherPort(lastElement.y);
     const plotData: any[] = [];
-    // plotData.push({
-    //   time: addTime(lastElement.x, distancePerTrip / speed),
-    //   batteryCapacity: bufferCapacity,
-    //   port: currentPort,
-    // });
 
-    console.log(plotData[0]);
     let currentBatteryCapacity = totalBatteryCapacity;
     let currentPort = null;
     let currentTime = null;
     let index = 0;
-    console.log({ currentBatteryCapacity });
     for (const element of scheduleData) {
       currentPort = element.y;
       currentTime = element.x;
@@ -230,14 +221,15 @@ function FerryFormMUI() {
       currentTime = addTime(currentTime, distancePerTrip / speed);
       console.log("Trip End", currentTime, distancePerTrip / speed);
       currentPort = getOtherPort(currentPort);
-      currentBatteryCapacity = roundOff(currentBatteryCapacity - perTripEnergy);
+      currentBatteryCapacity = roundOff(
+        currentBatteryCapacity - energyCostForTrip
+      );
       if (currentBatteryCapacity < bufferBattery) continue;
       plotData.push({
         time: currentTime,
         batteryCapacity: currentBatteryCapacity,
         port: currentPort,
       });
-      console.log("Inserted Trip End", currentTime, currentBatteryCapacity);
 
       const nextElement = scheduleData[index + 1];
       if (
@@ -256,19 +248,6 @@ function FerryFormMUI() {
             );
 
             if (potentialChargeTime > minFastChargeTimeMinutes) {
-              // console.log("before charging time", currentTime);
-              // currentTime = addTime(
-              //   currentTime,
-              //   (potentialChargeTime - 5) / 60
-              // );
-
-              // y2-y1/x2-x1 = slope
-              // chargingPower = (y2-y1)/(x2-x1)
-              // y2 = chargingPower*(x2-x1) + y1
-              // y2 = chargingPower*(potentialChargeTime-5) + y1
-              // console.log("chargingPower", chargingPower);
-              // No port change during fast charge
-
               const maxCharge = roundOff(
                 maxFastChargingPercent * totalBatteryCapacity
               );
@@ -278,13 +257,7 @@ function FerryFormMUI() {
               );
               // y2-y1 = chargingPower*(x2-x1)
               // x2 = y2-y1/chargingPower + x1
-              // console.log("maxCharge", maxCharge, "newCharge", newCharge);
               if (maxCharge < newCharge) {
-                // console.log(
-                //   currentTime,
-                //   "timeee to add",
-                //   (maxCharge - currentBatteryCapacity) / chargingPower
-                // );
                 currentTime = addTime(
                   currentTime,
                   (maxCharge - currentBatteryCapacity) / chargingPower
@@ -292,25 +265,11 @@ function FerryFormMUI() {
                 currentBatteryCapacity = maxCharge;
               } else {
                 currentBatteryCapacity = newCharge;
-                // console.log("newCharge", newCharge);
                 currentTime = addTime(
                   currentTime,
                   (newCharge - currentBatteryCapacity) / chargingPower
                 );
               }
-
-              // chargingPower = (y2-y1)/(x2-x1)
-              // x2 = chargingPower*(y2-y1) + x1
-              // currentTime = addTime(
-              //   currentTime,
-              //   (newBatteryCapacity - currentBatteryCapacity) / chargingPower
-              // );
-              // console.log(
-              //   "Charging++",
-              //   currentBatteryCapacity,
-              //   currentTime,
-              //   potentialChargeTime
-              // );
 
               plotData.push({
                 time: currentTime,
@@ -324,17 +283,9 @@ function FerryFormMUI() {
 
       index++;
     }
-    console.log(plotData);
-    // const optimisedData = optimizeBatteryUsage(
-    //   plotData,
-    //   plotData[plotData.length - 1].batteryCapacity - bufferBattery
-    // );
-    // plotData.sort((a: any, b: any) => a.time.localeCompare(b.time));
-
     let adjustedData = JSON.parse(JSON.stringify(plotData)); // Clone to avoid mutating original data
     let remainingDiff =
       plotData[plotData.length - 1].batteryCapacity - bufferBattery;
-    console.log("remainingDiff", remainingDiff);
 
     // Iterate backwards to find charging starts
     for (let i = adjustedData.length - 1; i > 0 && remainingDiff > 0; i--) {
@@ -342,15 +293,9 @@ function FerryFormMUI() {
       if (
         adjustedData[i].batteryCapacity > adjustedData[i - 1].batteryCapacity
       ) {
-        console.log(
-          "First charge",
-          adjustedData[i].batteryCapacity,
-          adjustedData[i - 1].batteryCapacity
-        );
         // Calculate the amount charged in this session
         let chargeAmount =
           adjustedData[i].batteryCapacity - adjustedData[i - 1].batteryCapacity;
-        console.log("chargeAmount", chargeAmount);
         let amtToReduce = 0;
         // If reducing this session's charge amount by remainingDiff doesn't go below 0
         if (chargeAmount - remainingDiff > 0) {
@@ -361,36 +306,16 @@ function FerryFormMUI() {
         // Adjust the post-charge battery capacity
         for (let j = adjustedData.length - 1; j >= i; j--) {
           const newVal = adjustedData[j].batteryCapacity - amtToReduce;
-          console.log(
-            adjustedData[j].time,
-            "new adjusted capacity",
-            adjustedData[j].batteryCapacity,
-            newVal
-          );
           adjustedData[j].batteryCapacity = newVal;
           if (j == i) {
-            // charging point
-            console.log(
-              adjustedData[j].time,
-              "updatedTime",
-              adjustedData[j - 1].time
-            );
             const updatedTime = addTime(
               adjustedData[j - 1].time,
               (newVal - adjustedData[j - 1].batteryCapacity) / chargingPower
             );
-            // console.log(
-            //   "updatedTime",
-            //   adjustedData[i].time,
-            //   updatedTime,
-            //   adjustedData[i].batteryCapacity,
-            //   newVal
-            // );
             adjustedData[j].time = updatedTime;
           }
         }
         remainingDiff -= amtToReduce;
-        // console.log("remainingDiff", remainingDiff);
       }
     }
 
@@ -441,8 +366,7 @@ function FerryFormMUI() {
         name: `Buffer capacity`,
       },
     ];
-    setPlotData(formattedData);
-    console.log(formattedData);
+    setPlotData(JSON.parse(JSON.stringify(formattedData)));
     return plotData;
   };
 
@@ -460,7 +384,6 @@ function FerryFormMUI() {
   const handleSubmit = (e: Event) => {
     e.preventDefault();
     const formDataJson = JSON.stringify(formData);
-    // console.log("Form Data JSON:", formDataJson);
     const totalBatteryCapacity = calculateBatteryCapacity(formData);
     console.log("Total Battery Capacity in kWh:", totalBatteryCapacity);
     if (!totalBatteryCapacity) return;
@@ -806,3 +729,4 @@ function FerryFormMUI() {
 }
 
 export default FerryFormMUI;
+
