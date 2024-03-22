@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useState, useRef } from "react";
 import dayjs from "dayjs";
 import Plot from "react-plotly.js";

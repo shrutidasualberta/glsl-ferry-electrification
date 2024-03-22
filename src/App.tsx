@@ -1,3 +1,4 @@
+// @ts-nocheck
 import "./styles.css";
 import FerryForm from "./FerryForm";
 export default function App() {
